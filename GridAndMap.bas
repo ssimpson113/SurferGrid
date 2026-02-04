@@ -1,26 +1,28 @@
 ' =============================================================================
 ' GridAndMap.bas
-' Golden Software Surfer - Scripter Script
+' Golden Software Surfer 30 - Scripter Script
 '
 ' This script performs the following:
-'   1. Grids a text data file using Triangulation with Linear Interpolation
-'   2. Applies a log Z-transform during gridding (saves output as linear values)
-'   3. Blanks the grid using a BLN boundary file (assigns NoData outside boundary)
-'   4. Creates a new plot with a Color Relief map from the blanked grid
-'   5. Configures terrain representation to Color Only
-'   6. Loads a custom color map from a CLR file
-'   7. Sets the color map to use logarithmic data scaling
+'   1. Grids a comma-delimited .dat data file using Triangulation with
+'      Linear Interpolation, with a log Z-transform (saved as linear)
+'   2. Blanks the grid using a BLN boundary file (NoData outside boundary)
+'   3. Creates a new plot with a Color Relief map from the blanked grid
+'   4. Sets terrain representation to Color Only
+'   5. Loads a custom color map from a CLR file
+'   6. Sets the color scale to use logarithmic scaling
+'   7. Saves the grid (.grd) and map (.srf) to the script directory
 '
 ' Requirements:
-'   - Golden Software Surfer (version 16 or later recommended)
-'   - A well-formatted text data file with X, Y, Z columns
+'   - Golden Software Surfer 30
+'   - A comma-delimited .dat data file with headers and X, Y, Z columns
 '   - A BLN boundary file defining the NoData region
-'   - A CLR color map file for the color relief display
+'   - A Surfer CLR color map file
 '
 ' Usage:
 '   1. Open Scripter (included with Surfer)
 '   2. Open this script (File > Open)
-'   3. Edit the CONFIGURATION section below to set your file paths and parameters
+'   3. Edit the CONFIGURATION section below to set your file paths and
+'      grid cell spacing
 '   4. Run the script (Script > Run)
 ' =============================================================================
 
@@ -30,16 +32,14 @@ Sub Main
     ' CONFIGURATION - Edit these values before running the script
     ' =========================================================================
 
-    ' --- File Paths ---
+    ' --- Input File Paths ---
     Dim DataFile As String
     Dim BlnFile As String
     Dim ColorMapFile As String
-    Dim OutGridFile As String
 
-    DataFile     = "C:\Data\input_data.txt"       ' Input text data file (X, Y, Z)
-    BlnFile      = "C:\Data\boundary.bln"          ' BLN boundary file for blanking
-    ColorMapFile = "C:\Data\colormap.clr"           ' CLR color map file
-    OutGridFile  = "C:\Data\output.grd"             ' Output grid file
+    DataFile     = "C:\Data\input_data.dat"         ' Comma-delimited .dat file (X, Y, Z with headers)
+    BlnFile      = "C:\Data\boundary.bln"           ' BLN boundary file for blanking
+    ColorMapFile = "C:\Data\colormap.clr"            ' Surfer CLR color map file
 
     ' --- Data Column Assignments (1-based column index) ---
     Dim xCol As Long
@@ -51,11 +51,21 @@ Sub Main
     zCol = 3    ' Column containing Z values
 
     ' --- Grid Cell Spacing ---
-    Dim xSpacing As Double
-    Dim ySpacing As Double
+    Dim CellSpacing As Double
 
-    xSpacing = 10.0     ' Cell size in the X direction
-    ySpacing = 10.0     ' Cell size in the Y direction
+    CellSpacing = 100.0     ' Grid cell size (used for both X and Y directions)
+
+    ' =========================================================================
+    ' OUTPUT FILE PATHS (saved to the script's working directory)
+    ' =========================================================================
+
+    Dim OutDir As String
+    Dim OutGridFile As String
+    Dim OutMapFile As String
+
+    OutDir       = CurDir() & "\"
+    OutGridFile  = OutDir & "output_grid.grd"
+    OutMapFile   = OutDir & "output_map.srf"
 
     ' =========================================================================
     ' INITIALIZE SURFER
@@ -66,15 +76,19 @@ Sub Main
     SurferApp.Visible = True
 
     Debug.Print "Surfer application started."
+    Debug.Print "Output directory: " & OutDir
 
     ' =========================================================================
     ' STEP 1: CREATE THE GRID
     '   Method:      Triangulation with Linear Interpolation
     '   Z-Transform: Log, save as Linear
-    '   Cell Size:   Defined by xSpacing and ySpacing above
+    '   Cell Size:   Defined by CellSpacing above
     ' =========================================================================
 
     Debug.Print "Gridding data file: " & DataFile
+    Debug.Print "  Algorithm:  Triangulation (Linear Interpolation)"
+    Debug.Print "  Z-Transform: Log, save as Linear"
+    Debug.Print "  Cell spacing: " & CellSpacing
 
     SurferApp.GridData6 _
         DataFile:=DataFile, _
@@ -82,8 +96,8 @@ Sub Main
         yCol:=yCol, _
         zCol:=zCol, _
         Algorithm:=srfTriangulation, _
-        xSize:=xSpacing, _
-        ySize:=ySpacing, _
+        xSize:=CellSpacing, _
+        ySize:=CellSpacing, _
         ZTransformMethod:=srfZTransformLogSaveAsLinear, _
         OutGrid:=OutGridFile, _
         OutFmt:=srfGridFmtS7, _
@@ -124,7 +138,7 @@ Sub Main
     ' STEP 4: CONFIGURE THE COLOR RELIEF LAYER
     '   - Terrain Representation: Color Only (no hill shading or reflectance)
     '   - Color Map:              Loaded from external CLR file
-    '   - Scaling:                Logarithmic
+    '   - Scaling:                Logarithmic (levels at 1, 10, 100, etc.)
     ' =========================================================================
 
     ' Access the Color Relief layer from the map frame overlays
@@ -133,17 +147,38 @@ Sub Main
 
     ' Set terrain representation to Color Only (no illumination effects)
     ColorReliefLayer.ReliefMethod = srfReliefColorOnly
+    Debug.Print "  Terrain representation set to Color Only."
 
     ' Show the color scale bar on the map
     ColorReliefLayer.ShowColorScale = True
 
     ' Load the custom color map from the CLR file
     ColorReliefLayer.ColorMap.LoadFile(ColorMapFile)
+    Debug.Print "  Color map loaded: " & ColorMapFile
 
-    ' Set the color map to use logarithmic data scaling
+    ' Set the color map to use logarithmic scaling so that color scale
+    ' levels are logarithmically distributed (e.g. 1, 10, 100, 1000)
     ColorReliefLayer.ColorMap.ScalingMethod = srfColorScalingLog
+    Debug.Print "  Logarithmic color scaling applied."
 
     Debug.Print "Color relief map configured."
+
+    ' =========================================================================
+    ' STEP 5: SAVE THE MAP DOCUMENT
+    ' =========================================================================
+
+    PlotDoc.SaveAs(OutMapFile)
+    Debug.Print "Map saved: " & OutMapFile
+
+    ' =========================================================================
+    ' DONE
+    ' =========================================================================
+
     Debug.Print "Script completed successfully."
+
+    MsgBox "Script completed successfully!" & vbCrLf & vbCrLf & _
+           "Grid file: " & OutGridFile & vbCrLf & _
+           "Map file:  " & OutMapFile, _
+           vbInformation, "GridAndMap"
 
 End Sub
